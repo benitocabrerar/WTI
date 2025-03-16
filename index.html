@@ -14,6 +14,12 @@
     <!-- Cargar Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Importa la librería Chart.js para la generación de gráficos -->
 
+    <!-- Incluir librerías para exportar a PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- html2canvas: Convierte elementos HTML en imágenes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- jsPDF: Genera documentos PDF desde JavaScript -->
+
     <!-- Incluir el script de la aplicación integrado directamente -->
     <script defer> <!-- El atributo "defer" hace que el script se ejecute una vez cargado el HTML -->
         // Espera a que el DOM se cargue completamente antes de ejecutar el script
@@ -221,6 +227,21 @@
         .contact-info p { /* Estilos para la información de contacto */
             margin: 5px 0; /* Margen vertical reducido */
         }
+        /* Estilos para el botón de exportar el informe */
+        #exportBtn { 
+            display: block; /* Muestra el botón en bloque para centrarlo */
+            margin: 20px auto; /* Centra el botón horizontalmente y agrega margen vertical */
+            padding: 10px 20px; /* Espaciado interno en el botón */
+            font-size: 1em; /* Tamaño de fuente adecuado */
+            background-color: #2e6da4; /* Color de fondo del botón */
+            color: #fff; /* Color del texto */
+            border: none; /* Sin borde */
+            border-radius: 5px; /* Bordes redondeados */
+            cursor: pointer; /* Cambia el cursor al pasar sobre el botón */
+        }
+        #exportBtn:hover { 
+            background-color: #1d7ab0; /* Cambia el color de fondo al pasar el mouse */
+        }
     </style> <!-- Fin de la sección de estilos internos -->
 </head> <!-- Fin de la sección "head" -->
 <body> <!-- Inicio del cuerpo del documento -->
@@ -294,6 +315,10 @@
         </canvas>
     </section>
 
+    <!-- Botón para exportar el informe completo -->
+    <button id="exportBtn">Exportar Informe</button>
+    <!-- El botón "Exportar Informe" permite al usuario generar un PDF con todos los datos y gráficos -->
+
     <!-- Footer -->
     <footer> <!-- Inicio del pie de página -->
         <p>&copy; 2024 Industria Petrolera Global - OilMaster. Todos los derechos reservados.</p> <!-- Información de derechos de autor -->
@@ -308,5 +333,61 @@
             <p><i class="fas fa-envelope"></i> Email: <a href="mailto:benitocabrera@hotmail.com">benitocabrera@hotmail.com</a></p> <!-- Muestra el correo electrónico con enlace mailto -->
         </div>
     </footer> <!-- Fin del pie de página -->
+
+    <!-- Script para la funcionalidad de exportar informe multipágina -->
+    <script>
+        // Agrega un evento de clic al botón de exportar informe
+        document.getElementById("exportBtn").addEventListener("click", function() {
+            exportReport(); // Llama a la función exportReport al hacer clic
+        });
+
+        // Función para exportar el informe completo en PDF multipágina
+        async function exportReport() {
+            const { jsPDF } = window.jspdf; // Extrae el objeto jsPDF del espacio de nombres de la librería jsPDF
+            // Crea una nueva instancia de jsPDF con orientación vertical ('p'), unidades en puntos ('pt') y tamaño de página A4
+            const doc = new jsPDF('p', 'pt', 'a4');
+            
+            // Convierte el contenido del <body> en una imagen utilizando html2canvas
+            const body = document.body; // Selecciona el cuerpo del documento
+            const canvas = await html2canvas(body, { allowTaint: true });
+            // Convierte el canvas a una imagen en formato PNG
+            const imgData = canvas.toDataURL('image/png');
+            
+            // Obtiene las propiedades de la imagen para calcular dimensiones
+            const imgProps = doc.getImageProperties(imgData);
+            // Define el ancho del PDF (según la configuración de la página A4)
+            const pdfWidth = doc.internal.pageSize.getWidth();
+            // Calcula la altura de la imagen manteniendo la proporción original
+            const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            
+            // Obtiene la altura de la página en el PDF
+            const pdfHeight = doc.internal.pageSize.getHeight();
+            
+            // Variable para rastrear la altura restante de la imagen a agregar
+            let heightLeft = imgHeight;
+            // Posición inicial en Y
+            let position = 0;
+            
+            // Agrega la primera página con la parte visible de la imagen
+            doc.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+            
+            // Mientras quede parte de la imagen, se crean nuevas páginas
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight; // Calcula la posición de la siguiente porción de imagen
+                doc.addPage(); // Agrega una nueva página al documento PDF
+                doc.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight); // Agrega la misma imagen desplazada para simular continuidad
+                heightLeft -= pdfHeight; // Actualiza la altura restante
+            }
+            
+            // Genera un nombre de archivo que incluya la fecha y la hora actuales
+            const now = new Date();
+            // Formatea la fecha y hora en un formato legible (ejemplo: 2025-03-16T10-45-30)
+            const dateStr = now.toISOString().slice(0,19).replace(/:/g, "-");
+            // Guarda el documento PDF con el nombre que incluye la fecha y hora
+            doc.save(`informe_OilMaster_${dateStr}.pdf`);
+        }
+    </script>
+    <!-- Fin del script para exportar informe multipágina -->
 </body> <!-- Fin del cuerpo del documento -->
 </html>
