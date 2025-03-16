@@ -1,0 +1,312 @@
+<!DOCTYPE html> <!-- Define el tipo de documento como HTML5 -->
+<html lang="es"> <!-- Inicio del documento HTML, indicando que el idioma es español -->
+<head> <!-- Inicio de la sección "head" que contiene metadatos y enlaces a recursos -->
+    <meta charset="UTF-8"> <!-- Define la codificación de caracteres como UTF-8 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Configura la vista para dispositivos móviles -->
+    <title>Visualización del WTI - OilMaster</title> <!-- Título de la página que se mostrará en la pestaña del navegador -->
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"> <!-- Importa la fuente "Roboto" de Google Fonts -->
+
+    <!-- Font Awesome para Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" /> <!-- Importa la librería de iconos Font Awesome -->
+
+    <!-- Cargar Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Importa la librería Chart.js para la generación de gráficos -->
+
+    <!-- Incluir el script de la aplicación integrado directamente -->
+    <script defer> <!-- El atributo "defer" hace que el script se ejecute una vez cargado el HTML -->
+        // Espera a que el DOM se cargue completamente antes de ejecutar el script
+        document.addEventListener("DOMContentLoaded", async () => { 
+            const apiKey = "Aqscy4jKyf41oG8wUc18pdtTCzlHdy57eceKRmvP"; // Define la clave API para acceder a la API de la EIA
+            const currentYear = new Date().getFullYear(); // Obtiene el año actual
+            const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0"); // Obtiene el mes actual y lo formatea a dos dígitos
+            const previousYear = currentYear - 1; // Calcula el año anterior
+
+            // Construcción de URLs para obtener datos diarios, mensuales y anuales del WTI
+            const urlMonthly = `https://api.eia.gov/v2/petroleum/pri/spt/data/?frequency=monthly&data[0]=value&facets[product][]=EPCWTI&start=${previousYear}-01&end=${currentYear}-12&api_key=${apiKey}`; 
+            // URL para datos mensuales desde enero del año anterior hasta diciembre del año actual
+
+            const urlDaily = `https://api.eia.gov/v2/petroleum/pri/spt/data/?frequency=daily&data[0]=value&facets[product][]=EPCWTI&start=${currentYear}-${currentMonth}-01&end=${currentYear}-${currentMonth}-31&api_key=${apiKey}`;
+            // URL para datos diarios del mes actual
+
+            const urlAnnual = `https://api.eia.gov/v2/petroleum/pri/spt/data/?frequency=annual&data[0]=value&facets[product][]=EPCWTI&start=${currentYear - 20}&end=${currentYear}&api_key=${apiKey}`;
+            // URL para datos anuales de los últimos 20 años
+
+            try { // Intenta ejecutar las solicitudes a la API
+                // Realiza tres solicitudes fetch en paralelo para datos mensuales, diarios y anuales
+                const [responseMonthly, responseDaily, responseAnnual] = await Promise.all([
+                    fetch(urlMonthly), // Solicita datos mensuales
+                    fetch(urlDaily),   // Solicita datos diarios
+                    fetch(urlAnnual)   // Solicita datos anuales
+                ]);
+
+                // Convierte las respuestas en formato JSON
+                const [dataMonthly, dataDaily, dataAnnual] = await Promise.all([
+                    responseMonthly.json(), // Procesa la respuesta mensual
+                    responseDaily.json(),   // Procesa la respuesta diaria
+                    responseAnnual.json()   // Procesa la respuesta anual
+                ]);
+
+                // Procesamiento y visualización de datos diarios
+                if (dataDaily.response && dataDaily.response.data.length > 0) { // Verifica que existan datos diarios
+                    // Filtra y ordena los datos diarios para la serie "RWTC"
+                    const dailyData = dataDaily.response.data
+                        .filter(item => item.series === "RWTC") // Selecciona solo datos de la serie "RWTC"
+                        .sort((a, b) => new Date(b.period) - new Date(a.period)); // Ordena los datos de forma descendente por fecha
+
+                    const latestDailyValue = dailyData[0]; // Selecciona el dato más reciente
+                    // Muestra el precio actual del WTI en el elemento con id "result"
+                    document.getElementById("result").innerHTML = `<h2>Precio Actual del WTI (${latestDailyValue.period}): $${latestDailyValue.value}</h2>`;
+
+                    // Llena la tabla de datos diarios con cada registro obtenido
+                    const dailyTableBody = document.getElementById("dailyDataTableBody"); // Selecciona el cuerpo de la tabla diaria
+                    dailyData.forEach(item => { // Itera sobre cada dato diario
+                        const row = document.createElement("tr"); // Crea una nueva fila de tabla
+                        row.innerHTML = `<td>${item.period}</td><td>$${item.value}</td>`; // Inserta las celdas con la fecha y el valor
+                        dailyTableBody.appendChild(row); // Agrega la fila a la tabla
+                    });
+
+                    // Creación del gráfico de datos diarios usando Chart.js
+                    const ctxDaily = document.getElementById("dailyChart").getContext("2d"); // Obtiene el contexto del canvas para el gráfico diario
+                    new Chart(ctxDaily, { 
+                        type: 'line', // Define el gráfico como línea
+                        data: {
+                            labels: dailyData.map(item => item.period), // Etiquetas del eje X con las fechas diarias
+                            datasets: [{
+                                label: 'Precio Diario WTI Crude Oil (USD)', // Etiqueta del conjunto de datos
+                                data: dailyData.map(item => item.value), // Valores del eje Y (precio)
+                                borderColor: 'rgba(255, 159, 64, 1)', // Color del borde de la línea
+                                backgroundColor: 'rgba(255, 159, 64, 0.2)', // Color del fondo bajo la línea
+                                fill: true, // Activa el relleno bajo la línea
+                                tension: 0.4 // Suaviza la línea con una tensión de 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true, // Hace que el gráfico se ajuste a distintos tamaños de pantalla
+                            scales: {
+                                x: { title: { display: true, text: 'Día' } }, // Título del eje X
+                                y: { title: { display: true, text: 'Precio Diario (USD)' } } // Título del eje Y
+                            }
+                        }
+                    });
+                }
+
+                // Procesamiento y visualización de datos mensuales
+                if (dataMonthly.response && dataMonthly.response.data.length > 0) { // Verifica que existan datos mensuales
+                    // Filtra y ordena los datos mensuales para la serie "RWTC"
+                    const wtiData = dataMonthly.response.data
+                        .filter(item => item.series === "RWTC") // Selecciona los datos de la serie "RWTC"
+                        .sort((a, b) => new Date(a.period) - new Date(b.period)); // Ordena los datos de forma ascendente por fecha
+
+                    // Calcula el promedio anual del WTI a partir de los datos mensuales
+                    const averageAnnual = wtiData.reduce((acc, item) => acc + parseFloat(item.value), 0) / wtiData.length;
+                    // Muestra el promedio anual en el elemento con id "averageWTI"
+                    document.getElementById("averageWTI").innerHTML = `<h2 style="color: blue; font-size: 2em;">Promedio Anual del WTI: $${averageAnnual.toFixed(2)}</h2>`;
+
+                    // Llena la tabla de datos mensuales con cada registro obtenido
+                    const tableBody = document.getElementById("dataTableBody"); // Selecciona el cuerpo de la tabla mensual
+                    wtiData.forEach(item => { // Itera sobre cada dato mensual
+                        const row = document.createElement("tr"); // Crea una nueva fila para la tabla
+                        row.innerHTML = `<td>${item.period}</td><td>$${item.value}</td>`; // Inserta las celdas con la fecha y el valor
+                        tableBody.appendChild(row); // Agrega la fila a la tabla
+                    });
+
+                    // Creación del gráfico de datos mensuales usando Chart.js
+                    const ctxMonthly = document.getElementById("wtiChart").getContext("2d"); // Obtiene el contexto del canvas para el gráfico mensual
+                    new Chart(ctxMonthly, { 
+                        type: 'line', // Define el gráfico como línea
+                        data: {
+                            labels: wtiData.map(item => item.period), // Etiquetas del eje X con las fechas mensuales
+                            datasets: [{
+                                label: 'Precio WTI Crude Oil (USD)', // Etiqueta del conjunto de datos
+                                data: wtiData.map(item => item.value), // Valores del eje Y (precio mensual)
+                                borderColor: 'rgba(75, 192, 192, 1)', // Color del borde de la línea
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)', // Color del fondo bajo la línea
+                                fill: true, // Activa el relleno bajo la línea
+                                tension: 0.4 // Suaviza la línea con una tensión de 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true, // Hace que el gráfico sea responsivo
+                            scales: {
+                                x: { title: { display: true, text: 'Mes' } }, // Título del eje X
+                                y: { title: { display: true, text: 'Precio (USD)' } } // Título del eje Y
+                            }
+                        }
+                    });
+                }
+
+                // Procesamiento y visualización de datos anuales
+                if (dataAnnual.response && dataAnnual.response.data.length > 0) { // Verifica que existan datos anuales
+                    // Ordena los datos anuales en orden ascendente según el año
+                    const annualData = dataAnnual.response.data.sort((a, b) => a.period - b.period);
+
+                    // Llena la tabla de promedios anuales con cada registro obtenido
+                    const annualTableBody = document.getElementById("annualDataTableBody"); // Selecciona el cuerpo de la tabla anual
+                    annualData.forEach(item => { // Itera sobre cada dato anual
+                        const row = document.createElement("tr"); // Crea una nueva fila para la tabla
+                        row.innerHTML = `<td>${item.period}</td><td>$${item.value}</td>`; // Inserta las celdas con el año y el valor promedio
+                        annualTableBody.appendChild(row); // Agrega la fila a la tabla
+                    });
+
+                    // Creación del gráfico de datos anuales usando Chart.js
+                    const ctxAnnual = document.getElementById("annualChart").getContext("2d"); // Obtiene el contexto del canvas para el gráfico anual
+                    new Chart(ctxAnnual, { 
+                        type: 'line', // Define el gráfico como línea
+                        data: {
+                            labels: annualData.map(item => item.period), // Etiquetas del eje X con los años
+                            datasets: [{
+                                label: 'Promedio Anual WTI Crude Oil (USD)', // Etiqueta del conjunto de datos
+                                data: annualData.map(item => item.value), // Valores del eje Y (promedio anual)
+                                borderColor: 'rgba(153, 102, 255, 1)', // Color del borde de la línea
+                                backgroundColor: 'rgba(153, 102, 255, 0.2)', // Color del fondo bajo la línea
+                                fill: true, // Activa el relleno bajo la línea
+                                tension: 0.4 // Suaviza la línea con una tensión de 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true, // Hace que el gráfico sea responsivo
+                            scales: {
+                                x: { title: { display: true, text: 'Año' } }, // Título del eje X
+                                y: { title: { display: true, text: 'Promedio Anual (USD)' } } // Título del eje Y
+                            }
+                        }
+                    });
+                }
+            } catch (error) { // Captura errores que puedan ocurrir durante las solicitudes
+                console.error("Error al obtener los datos:", error); // Registra el error en la consola
+                // Muestra un mensaje de error en el elemento con id "result"
+                document.getElementById("result").innerText = "Error al obtener los datos: " + error.message;
+            }
+        });
+    </script> <!-- Fin del script que integra la lógica de obtención y visualización de datos -->
+    
+    <style> <!-- Inicio de la sección de estilos internos -->
+        body { /* Estilos para el cuerpo del documento */
+            font-family: 'Roboto', sans-serif; /* Define la fuente principal */
+            color: #2e6da4; /* Define el color principal del texto */
+        }
+        h1 { /* Estilos para el encabezado principal */
+            text-align: center; /* Centra el texto */
+            font-size: 2.5em; /* Establece un tamaño grande para el título */
+            color: #2e6da4; /* Color del texto */
+        }
+        h2 { /* Estilos para los subtítulos */
+            color: #1d7ab0; /* Define el color de los subtítulos */
+        }
+        table { /* Estilos para las tablas */
+            width: 80%; /* La tabla ocupará el 80% del ancho del contenedor */
+            margin: 20px auto; /* Centra la tabla y agrega márgenes verticales */
+            border-collapse: collapse; /* Elimina espacios entre celdas */
+        }
+        table, th, td { /* Aplica estilos a tablas, encabezados y celdas */
+            border: 1px solid #ccc; /* Borde gris claro */
+        }
+        th, td { /* Estilos para celdas de tabla */
+            padding: 10px; /* Agrega espacio interno */
+            text-align: center; /* Centra el texto */
+        }
+        footer { /* Estilos para el pie de página */
+            text-align: center; /* Centra el contenido */
+            padding: 20px; /* Agrega espacio interno */
+            font-size: 1em; /* Tamaño de fuente estándar */
+            color: #666; /* Color gris para el texto */
+        }
+        .social-links a { /* Estilos para los enlaces de redes sociales */
+            margin: 0 10px; /* Espaciado horizontal entre iconos */
+            color: #666; /* Color de los iconos */
+            font-size: 1.2em; /* Tamaño de los iconos */
+        }
+        .contact-info p { /* Estilos para la información de contacto */
+            margin: 5px 0; /* Margen vertical reducido */
+        }
+    </style> <!-- Fin de la sección de estilos internos -->
+</head> <!-- Fin de la sección "head" -->
+<body> <!-- Inicio del cuerpo del documento -->
+    <!-- Título Principal -->
+    <h1>Monitoreo Global del Precio WTI - Últimas Actualizaciones</h1> <!-- Muestra el título principal de la página -->
+    
+    <!-- Sección para mostrar el valor más reciente del WTI -->
+    <div id="result" style="text-align: center; margin-top: 20px;">
+        <!-- Aquí se mostrará dinámicamente el precio actual del WTI -->
+    </div>
+
+    <!-- Sección para mostrar el promedio anual del WTI -->
+    <div id="averageWTI" style="text-align: center; margin-top: 20px;">
+        <!-- Aquí se mostrará dinámicamente el promedio anual del WTI -->
+    </div>
+
+    <!-- Sección de datos diarios -->
+    <section style="text-align: center; margin-top: 30px;">
+        <h2>Datos Diarios del WTI para Este Mes</h2> <!-- Título de la sección de datos diarios -->
+        <table> <!-- Tabla para mostrar los datos diarios -->
+            <thead> <!-- Encabezado de la tabla -->
+                <tr> <!-- Fila de encabezado -->
+                    <th>Fecha</th> <!-- Columna para la fecha -->
+                    <th>Valor del WTI (USD)</th> <!-- Columna para el valor diario -->
+                </tr>
+            </thead>
+            <tbody id="dailyDataTableBody">
+                <!-- Aquí se insertarán dinámicamente las filas con los datos diarios -->
+            </tbody>
+        </table>
+        <canvas id="dailyChart" width="400" height="200" style="margin-top: 20px;">
+            <!-- Canvas para dibujar el gráfico de datos diarios -->
+        </canvas>
+    </section>
+
+    <!-- Sección de datos mensuales -->
+    <section style="text-align: center; margin-top: 30px;">
+        <h2>Datos Históricos Mensuales</h2> <!-- Título de la sección de datos mensuales -->
+        <table> <!-- Tabla para mostrar los datos mensuales -->
+            <thead> <!-- Encabezado de la tabla -->
+                <tr> <!-- Fila de encabezado -->
+                    <th>Fecha</th> <!-- Columna para la fecha -->
+                    <th>Valor del WTI (USD)</th> <!-- Columna para el valor mensual -->
+                </tr>
+            </thead>
+            <tbody id="dataTableBody">
+                <!-- Aquí se insertarán dinámicamente las filas con los datos mensuales -->
+            </tbody>
+        </table>
+        <canvas id="wtiChart" width="400" height="200" style="margin-top: 20px;">
+            <!-- Canvas para dibujar el gráfico de datos mensuales -->
+        </canvas>
+    </section>
+
+    <!-- Sección de datos anuales -->
+    <section style="text-align: center; margin-top: 30px;">
+        <h2>Promedio Anual del Precio WTI en los Últimos 20 Años</h2> <!-- Título de la sección de datos anuales -->
+        <table> <!-- Tabla para mostrar los datos anuales -->
+            <thead> <!-- Encabezado de la tabla -->
+                <tr> <!-- Fila de encabezado -->
+                    <th>Año</th> <!-- Columna para el año -->
+                    <th>Promedio Anual del WTI (USD)</th> <!-- Columna para el promedio anual -->
+                </tr>
+            </thead>
+            <tbody id="annualDataTableBody">
+                <!-- Aquí se insertarán dinámicamente las filas con los datos anuales -->
+            </tbody>
+        </table>
+        <canvas id="annualChart" width="400" height="200" style="margin-top: 20px;">
+            <!-- Canvas para dibujar el gráfico de datos anuales -->
+        </canvas>
+    </section>
+
+    <!-- Footer -->
+    <footer> <!-- Inicio del pie de página -->
+        <p>&copy; 2024 Industria Petrolera Global - OilMaster. Todos los derechos reservados.</p> <!-- Información de derechos de autor -->
+        <div class="social-links"> <!-- Contenedor para los enlaces de redes sociales -->
+            <a href="https://www.facebook.com/benito.cabrera.92" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a> <!-- Enlace a Facebook con icono -->
+            <a href="https://twitter.com/benitocabrera" aria-label="Twitter"><i class="fab fa-twitter"></i></a> <!-- Enlace a Twitter con icono -->
+            <a href="https://www.linkedin.com/in/benito-cabrera-r/" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a> <!-- Enlace a LinkedIn con icono -->
+            <a href="https://www.instagram.com/benitocabrera" aria-label="Instagram"><i class="fab fa-instagram"></i></a> <!-- Enlace a Instagram con icono -->
+        </div>
+        <div class="contact-info"> <!-- Contenedor para la información de contacto -->
+            <p><i class="fas fa-phone-alt"></i> WhatsApp: +593996719754</p> <!-- Muestra el número de WhatsApp -->
+            <p><i class="fas fa-envelope"></i> Email: <a href="mailto:benitocabrera@hotmail.com">benitocabrera@hotmail.com</a></p> <!-- Muestra el correo electrónico con enlace mailto -->
+        </div>
+    </footer> <!-- Fin del pie de página -->
+</body> <!-- Fin del cuerpo del documento -->
+</html>
